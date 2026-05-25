@@ -323,8 +323,24 @@
             </div>
 
             <div class="control-group">
+                <div class="label-val">
+                    <label for="smoothness" class="group-title">Smoothness</label>
+                    <span id="smooth-val">0px</span>
+                </div>
+                <input type="range" id="smoothness" min="0" max="8" value="0" step="1">
+            </div>
+
+            <div class="control-group">
+                <div class="label-val">
+                    <label for="threshold" class="group-title">B&W Contrast Threshold</label>
+                    <span id="threshold-val">128</span>
+                </div>
+                <input type="range" id="threshold" min="10" max="240" value="128" step="5">
+            </div>
+
+            <div class="control-group">
                 <label class="group-title">3. Smart Paint Engine</label>
-                <p class="help-text">Click a color inside your image or selection row to lock it. Hold click and drag (sway) to repaint only that specific color profile!</p>
+                <p class="help-text">Click a color option below to choose which shading bracket to replace. Hold click and drag (sway) to color your lines in!</p>
                 
                 <div class="color-lock-status">
                     <span>Locked Target:</span>
@@ -362,7 +378,9 @@
             originalImage: null,
             targetColorHex: null,
             isSwaying: false,
-            pixelSize: 16
+            pixelSize: 16,
+            smoothRadius: 0,
+            bwThreshold: 128
         };
 
         const el = {
@@ -372,6 +390,10 @@
             fileLabel: document.getElementById('file-label'),
             pixelSizeSlider: document.getElementById('pixel-size'),
             ratioVal: document.getElementById('ratio-val'),
+            smoothnessSlider: document.getElementById('smoothness'),
+            smoothVal: document.getElementById('smooth-val'),
+            thresholdSlider: document.getElementById('threshold'),
+            thresholdVal: document.getElementById('threshold-val'),
             exportBtn: document.getElementById('export'),
             paintColorInput: document.getElementById('paint-color'),
             targetIndicator: document.getElementById('target-indicator'),
@@ -434,6 +456,18 @@
             if (state.originalImage) processAndRenderPixelation();
         });
 
+        el.smoothnessSlider.addEventListener('input', (e) => {
+            state.smoothRadius = parseInt(e.target.value);
+            el.smoothVal.textContent = `${state.smoothRadius}px`;
+            if (state.originalImage) processAndRenderPixelation();
+        });
+
+        el.thresholdSlider.addEventListener('input', (e) => {
+            state.bwThreshold = parseInt(e.target.value);
+            el.thresholdVal.textContent = state.bwThreshold;
+            if (state.originalImage) processAndRenderPixelation();
+        });
+
         function processAndRenderPixelation() {
             const img = state.originalImage;
             const size = state.pixelSize;
@@ -444,23 +478,79 @@
             el.canvas.height = h;
             el.canvas.style.width = `${w * size}px`;
             el.canvas.style.height = `${h * size}px`;
-            el.ctx.drawImage(img, 0, 0, w, h);
 
-            extractImagePalette(w, h);
-        }
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = w;
+            tempCanvas.height = h;
 
-        function extractImagePalette(w, h) {
-            const imgData = el.ctx.getImageData(0, 0, w, h).data;
-            const colorSet = new Set();
+            if (state.smoothRadius > 0) {
+                tempCtx.imageSmoothingEnabled = true;
+                tempCtx.imageSmoothingQuality = 'high';
+                
+                const steps = state.smoothRadius;
+                let currentW = img.width;
+                let currentH = img.height;
+                
+                const stepCanvas = document.createElement('canvas');
+                const stepCtx = stepCanvas.getContext('2d');
+                stepCanvas.width = img.width;
+                stepCanvas.height = img.height;
+                stepCtx.drawImage(img, 0, 0);
 
-            for (let i = 0; i < imgData.length; i += 4) {
-                if (imgData[i+3] < 128) continue;
-                colorSet.add(rgbToHex(imgData[i], imgData[i+1], imgData[i+2]));
-                if (colorSet.size >= 24) break;
+                for (let i = 0; i < steps; i++) {
+                    currentW = Math.max(w, Math.floor(currentW * 0.7));
+                    currentH = Math.max(h, Math.floor(currentH * 0.7));
+                    
+                    const nextCanvas = document.createElement('canvas');
+                    const nextCtx = nextCanvas.getContext('2d');
+                    nextCanvas.width = currentW;
+                    nextCanvas.height = currentH;
+                    nextCtx.imageSmoothingEnabled = true;
+                    nextCtx.imageSmoothingQuality = 'high';
+                    
+                    nextCtx.drawImage(stepCanvas, 0, 0, stepCanvas.width, stepCanvas.height, 0, 0, currentW, currentH);
+                    
+                    stepCanvas.width = currentW;
+                    stepCanvas.height = currentH;
+                    stepCtx.drawImage(nextCanvas, 0, 0);
+                    
+                    if (currentW === w && currentH === h) break;
+                }
+                tempCtx.drawImage(stepCanvas, 0, 0, stepCanvas.width, stepCanvas.height, 0, 0, w, h);
+            } else {
+                tempCtx.imageSmoothingEnabled = false;
+                tempCtx.drawImage(img, 0, 0, w, h);
             }
 
+            const imgDataObj = tempCtx.getImageData(0, 0, w, h);
+            const data = imgDataObj.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i+3] < 30) {
+                    data[i] = 255;
+                    data[i+1] = 255;
+                    data[i+2] = 255;
+                    data[i+3] = 255;
+                    continue;
+                }
+                const brightness = (data[i] * 0.299) + (data[i+1] * 0.587) + (data[i+2] * 0.114);
+                const colorValue = brightness >= state.bwThreshold ? 255 : 0;
+                data[i] = colorValue;
+                data[i+1] = colorValue;
+                data[i+2] = colorValue;
+                data[i+3] = 255;
+            }
+
+            el.ctx.putImageData(imgDataObj, 0, 0);
+            extractImagePalette();
+        }
+
+        function extractImagePalette() {
             el.autoPalette.innerHTML = '';
-            colorSet.forEach(hex => {
+            const staticColors = ['#000000', '#ffffff'];
+            
+            staticColors.forEach(hex => {
                 const swatch = document.createElement('div');
                 swatch.className = 'swatch';
                 swatch.style.backgroundColor = hex;
@@ -480,10 +570,9 @@
 
         function setTargetColor(hex) {
             state.targetColorHex = hex;
-            el.targetIndicator.textContent = hex;
+            el.targetIndicator.textContent = hex === '#000000' ? 'Black (0)' : 'White (255)';
             el.targetIndicator.style.backgroundColor = hex;
-            const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
-            el.targetIndicator.style.color = (r*0.299 + g*0.587 + b*0.114) > 186 ? '#000' : '#fff';
+            el.targetIndicator.style.color = hex === '#000000' ? '#fff' : '#000';
         }
 
         el.canvas.addEventListener('mousedown', (e) => {
