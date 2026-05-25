@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PixelSway 1.0 - Smart Pixel Art Editor</title>
+    <title>PixelSway/title>
     <style>
         :root {
             --bg-main: #f8fafc;
@@ -176,26 +176,9 @@
             padding: 2px 8px;
             border-radius: 4px;
             border: 1px solid var(--border-color);
-        }
-
-        .paint-picker {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            margin-top: 4px;
-        }
-
-        .paint-picker label {
-            font-size: 0.9rem;
-        }
-
-        input[type="color"] {
-            border: none;
-            width: 40px;
-            height: 40px;
-            border-radius: 6px;
-            cursor: pointer;
-            background: none;
+            gap: 6px;
         }
 
         .palette-grid {
@@ -216,16 +199,28 @@
         }
 
         .swatch {
-            width: 28px;
-            height: 28px;
-            border-radius: 4px;
+            width: 38px;
+            height: 38px;
+            border-radius: 6px;
             cursor: pointer;
-            border: 1px solid rgba(0,0,0,0.15);
-            transition: transform 0.1s;
+            border: 2px solid rgba(0,0,0,0.15);
+            transition: transform 0.1s, border-color 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+            user-select: none;
         }
 
-        .swatch:hover {
-            transform: scale(1.15);
+        .swatch.selected {
+            border-color: var(--accent-color);
+            transform: scale(1.1);
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+        }
+
+        .swatch:hover:not(.selected) {
+            transform: scale(1.05);
         }
 
         .btn {
@@ -332,31 +327,26 @@
 
             <div class="control-group">
                 <div class="label-val">
-                    <label for="threshold" class="group-title">B&W Contrast Threshold</label>
-                    <span id="threshold-val">128</span>
+                    <label for="max-colors" class="group-title">Number of Colors</label>
+                    <span id="colors-val">8</span>
                 </div>
-                <input type="range" id="threshold" min="10" max="240" value="128" step="5">
+                <input type="range" id="max-colors" min="4" max="24" value="8" step="1">
             </div>
 
             <div class="control-group">
-                <label class="group-title">3. Smart Paint Engine</label>
-                <p class="help-text">Click a color option below to choose which shading bracket to replace. Hold click and drag (sway) to color your lines in!</p>
+                <label class="group-title">3. Color-By-Number Palette</label>
+                <p class="help-text">Select a numbered color from your generated palette below. Then drag (sway) your mouse across the blank canvas numbers to paint them in!</p>
                 
                 <div class="color-lock-status">
-                    <span>Locked Target:</span>
+                    <span>Active Paint Color:</span>
                     <div id="target-indicator" class="indicator-box">None</div>
-                </div>
-
-                <div class="paint-picker">
-                    <label for="paint-color">New Replacement Color:</label>
-                    <input type="color" id="paint-color" value="#3b82f6">
                 </div>
             </div>
 
             <div class="control-group">
-                <label class="group-title">Detected Image Palette</label>
+                <label class="group-title">Palette Pickers</label>
                 <div id="auto-palette" class="palette-grid">
-                    <span class="empty-palette-text">Upload an image to extract colors</span>
+                    <span class="empty-palette-text">Upload an image to generate palette</span>
                 </div>
             </div>
 
@@ -376,11 +366,13 @@
     <script>
         const state = {
             originalImage: null,
-            targetColorHex: null,
+            activeColorIndex: -1,
             isSwaying: false,
             pixelSize: 16,
             smoothRadius: 0,
-            bwThreshold: 128
+            maxColors: 8,
+            palette: [], 
+            mapData: [] 
         };
 
         const el = {
@@ -392,10 +384,9 @@
             ratioVal: document.getElementById('ratio-val'),
             smoothnessSlider: document.getElementById('smoothness'),
             smoothVal: document.getElementById('smooth-val'),
-            thresholdSlider: document.getElementById('threshold'),
-            thresholdVal: document.getElementById('threshold-val'),
+            colorsSlider: document.getElementById('max-colors'),
+            colorsVal: document.getElementById('colors-val'),
             exportBtn: document.getElementById('export'),
-            paintColorInput: document.getElementById('paint-color'),
             targetIndicator: document.getElementById('target-indicator'),
             autoPalette: document.getElementById('auto-palette'),
             canvas: document.getElementById('canvas'),
@@ -407,6 +398,7 @@
         el.themeToggle.addEventListener('click', () => {
             const currentTheme = el.html.getAttribute('data-theme');
             el.html.setAttribute('data-theme', currentTheme === 'dark' ? 'light' : 'dark');
+            if (state.originalImage) renderBlankMap();
         });
 
         function handleImageLoad(src, fileName) {
@@ -417,7 +409,7 @@
                 el.dropZoneText.style.display = 'none';
                 el.canvas.style.display = 'block';
                 el.exportBtn.disabled = false;
-                processAndRenderPixelation();
+                processImageToPaletteAndMap();
             };
             img.src = src;
         }
@@ -453,29 +445,29 @@
         el.pixelSizeSlider.addEventListener('input', (e) => {
             state.pixelSize = parseInt(e.target.value);
             el.ratioVal.textContent = `${state.pixelSize}px`;
-            if (state.originalImage) processAndRenderPixelation();
+            if (state.originalImage) processImageToPaletteAndMap();
         });
 
         el.smoothnessSlider.addEventListener('input', (e) => {
             state.smoothRadius = parseInt(e.target.value);
             el.smoothVal.textContent = `${state.smoothRadius}px`;
-            if (state.originalImage) processAndRenderPixelation();
+            if (state.originalImage) processImageToPaletteAndMap();
         });
 
-        el.thresholdSlider.addEventListener('input', (e) => {
-            state.bwThreshold = parseInt(e.target.value);
-            el.thresholdVal.textContent = state.bwThreshold;
-            if (state.originalImage) processAndRenderPixelation();
+        el.colorsSlider.addEventListener('input', (e) => {
+            state.maxColors = parseInt(e.target.value);
+            el.colorsVal.textContent = state.maxColors;
+            if (state.originalImage) processImageToPaletteAndMap();
         });
 
-        function processAndRenderPixelation() {
+        function processImageToPaletteAndMap() {
             const img = state.originalImage;
             const size = state.pixelSize;
             const w = Math.max(4, Math.floor(img.width / size));
             const h = Math.max(4, Math.floor(img.height / size));
 
-            el.canvas.width = w;
-            el.canvas.height = h;
+            el.canvas.width = w * size;
+            el.canvas.height = h * size;
             el.canvas.style.width = `${w * size}px`;
             el.canvas.style.height = `${h * size}px`;
 
@@ -526,38 +518,134 @@
             const imgDataObj = tempCtx.getImageData(0, 0, w, h);
             const data = imgDataObj.data;
 
+            const colorCounts = {};
             for (let i = 0; i < data.length; i += 4) {
-                if (data[i+3] < 30) {
-                    data[i] = 255;
-                    data[i+1] = 255;
-                    data[i+2] = 255;
-                    data[i+3] = 255;
-                    continue;
-                }
-                const brightness = (data[i] * 0.299) + (data[i+1] * 0.587) + (data[i+2] * 0.114);
-                const colorValue = brightness >= state.bwThreshold ? 255 : 0;
-                data[i] = colorValue;
-                data[i+1] = colorValue;
-                data[i+2] = colorValue;
-                data[i+3] = 255;
+                if (data[i+3] < 30) continue;
+                const hex = rgbToHex(data[i], data[i+1], data[i+2]);
+                colorCounts[hex] = (colorCounts[hex] || 0) + 1;
             }
 
-            el.ctx.putImageData(imgDataObj, 0, 0);
-            extractImagePalette();
+            const sortedColors = Object.keys(colorCounts).sort((a, b) => colorCounts[b] - colorCounts[a]);
+            state.palette = sortedColors.slice(0, state.maxColors);
+
+            state.mapData = [];
+            for (let y = 0; y < h; y++) {
+                const row = [];
+                for (let x = 0; x < w; x++) {
+                    const idx = (y * w + x) * 4;
+                    if (data[idx+3] < 30) {
+                        row.push({ targetIndex: -1, painted: true, color: '#ffffff' });
+                        continue;
+                    }
+                    const currentHex = rgbToHex(data[idx], data[idx+1], data[idx+2]);
+                    let paletteIdx = state.palette.indexOf(currentHex);
+                    
+                    if (paletteIdx === -1) {
+                        let minDist = Infinity;
+                        let bestIdx = 0;
+                        const r1 = data[idx], g1 = data[idx+1], b1 = data[idx+2];
+                        
+                        state.palette.forEach((pColor, pIdx) => {
+                            const r2 = parseInt(pColor.slice(1,3), 16);
+                            const g2 = parseInt(pColor.slice(3,5), 16);
+                            const b2 = parseInt(pColor.slice(5,7), 16);
+                            const dist = Math.pow(r1-r2, 2) + Math.pow(g1-g2, 2) + Math.pow(b1-b2, 2);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                bestIdx = pIdx;
+                            }
+                        });
+                        paletteIdx = bestIdx;
+                    }
+                    
+                    row.push({
+                        targetIndex: paletteIdx,
+                        painted: false,
+                        color: state.palette[paletteIdx]
+                    });
+                }
+                state.mapData.push(row);
+            }
+
+            state.activeColorIndex = 0;
+            renderPaletteUI();
+            renderBlankMap();
         }
 
-        function extractImagePalette() {
+        function renderPaletteUI() {
             el.autoPalette.innerHTML = '';
-            const staticColors = ['#000000', '#ffffff'];
-            
-            staticColors.forEach(hex => {
+            state.palette.forEach((hex, idx) => {
                 const swatch = document.createElement('div');
-                swatch.className = 'swatch';
+                swatch.className = `swatch ${idx === state.activeColorIndex ? 'selected' : ''}`;
                 swatch.style.backgroundColor = hex;
-                swatch.title = `Lock color: ${hex}`;
-                swatch.addEventListener('click', () => setTargetColor(hex));
+                swatch.textContent = idx + 1;
+                
+                const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+                swatch.style.color = (r*0.299 + g*0.587 + b*0.114) > 186 ? '#000' : '#fff';
+                
+                swatch.addEventListener('click', () => {
+                    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('selected'));
+                    swatch.classList.add('selected');
+                    state.activeColorIndex = idx;
+                    updateActiveIndicator();
+                });
                 el.autoPalette.appendChild(swatch);
             });
+            updateActiveIndicator();
+        }
+
+        function updateActiveIndicator() {
+            if (state.activeColorIndex === -1 || state.palette.length === 0) {
+                el.targetIndicator.textContent = "None";
+                el.targetIndicator.style.backgroundColor = "transparent";
+                el.targetIndicator.style.color = "inherit";
+                return;
+            }
+            const currentHex = state.palette[state.activeColorIndex];
+            el.targetIndicator.textContent = `Color #${state.activeColorIndex + 1}`;
+            el.targetIndicator.style.backgroundColor = currentHex;
+            const r = parseInt(currentHex.slice(1,3), 16), g = parseInt(currentHex.slice(3,5), 16), b = parseInt(currentHex.slice(5,7), 16);
+            el.targetIndicator.style.color = (r*0.299 + g*0.587 + b*0.114) > 186 ? '#000' : '#fff';
+        }
+
+        function renderBlankMap() {
+            if (!state.mapData.length) return;
+            const h = state.mapData.length;
+            const w = state.mapData[0].length;
+            const size = state.pixelSize;
+
+            el.ctx.clearRect(0, 0, el.canvas.width, el.canvas.height);
+            
+            const isDarkMode = el.html.getAttribute('data-theme') === 'dark';
+            const gridColor = isDarkMode ? '#334155' : '#cbd5e1';
+            const numColor = isDarkMode ? '#475569' : '#94a3b8';
+
+            el.ctx.textAlign = 'center';
+            el.ctx.textBaseline = 'middle';
+            el.ctx.font = `bold ${Math.max(8, Math.floor(size * 0.5))}px sans-serif`;
+
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const cell = state.mapData[y][x];
+                    
+                    if (cell.painted) {
+                        el.ctx.fillStyle = cell.color;
+                        el.ctx.fillRect(x * size, y * size, size, size);
+                    } else {
+                        el.ctx.fillStyle = isDarkMode ? '#1e293b' : '#ffffff';
+                        el.ctx.fillRect(x * size, y * size, size, size);
+                        
+                        el.ctx.strokeStyle = gridColor;
+                        el.ctx.lineWidth = 0.5;
+                        el.ctx.strokeRect(x * size, y * size, size, size);
+
+                        if (cell.targetIndex !== -1) {
+                            el.ctx.fillStyle = numColor;
+                            el.ctx.fillText(cell.targetIndex + 1, x * size + size / 2, y * size + size / 2);
+                        }
+                    }
+                }
+            }
         }
 
         function getCanvasCoords(e) {
@@ -568,19 +656,10 @@
             };
         }
 
-        function setTargetColor(hex) {
-            state.targetColorHex = hex;
-            el.targetIndicator.textContent = hex === '#000000' ? 'Black (0)' : 'White (255)';
-            el.targetIndicator.style.backgroundColor = hex;
-            el.targetIndicator.style.color = hex === '#000000' ? '#fff' : '#000';
-        }
-
         el.canvas.addEventListener('mousedown', (e) => {
-            if (!state.originalImage) return;
-            const coords = getCanvasCoords(e);
-            const imgData = el.ctx.getImageData(coords.x, coords.y, 1, 1).data;
-            setTargetColor(rgbToHex(imgData[0], imgData[1], imgData[2]));
+            if (!state.originalImage || state.activeColorIndex === -1) return;
             state.isSwaying = true;
+            const coords = getCanvasCoords(e);
             executePaintSway(coords.x, coords.y);
         });
 
@@ -592,12 +671,20 @@
 
         window.addEventListener('mouseup', () => state.isSwaying = false);
 
-        function executePaintSway(x, y) {
-            if (x < 0 || x >= el.canvas.width || y < 0 || y >= el.canvas.height) return;
-            const imgData = el.ctx.getImageData(x, y, 1, 1).data;
-            if (rgbToHex(imgData[0], imgData[1], imgData[2]) === state.targetColorHex) {
-                el.ctx.fillStyle = el.paintColorInput.value;
-                el.ctx.fillRect(x, y, 1, 1);
+        function executePaintSway(canvasX, canvasY) {
+            const size = state.pixelSize;
+            const x = Math.floor(canvasX / size);
+            const y = Math.floor(canvasY / size);
+
+            if (y < 0 || y >= state.mapData.length || x < 0 || x >= state.mapData[0].length) return;
+            
+            const cell = state.mapData[y][x];
+            
+            if (!cell.painted && cell.targetIndex === state.activeColorIndex) {
+                cell.painted = true;
+                
+                el.ctx.fillStyle = cell.color;
+                el.ctx.fillRect(x * size, y * size, size, size);
             }
         }
 
@@ -610,20 +697,9 @@
 
         el.exportBtn.addEventListener('click', () => {
             if (!state.originalImage) return;
-            const exportCanvas = document.createElement('canvas');
-            const exportCtx = exportCanvas.getContext('2d');
-            const size = state.pixelSize;
-
-            exportCanvas.width = el.canvas.width * size;
-            exportCanvas.height = el.canvas.height * size;
-            exportCtx.imageSmoothingEnabled = false;
-            exportCtx.mozImageSmoothingEnabled = false;
-            exportCtx.webkitImageSmoothingEnabled = false;
-            exportCtx.drawImage(el.canvas, 0, 0, exportCanvas.width, exportCanvas.height);
-
             const link = document.createElement('a');
-            link.download = `pixelsway-${Date.now()}.png`;
-            link.href = exportCanvas.toDataURL('image/png');
+            link.download = `pixelsway-art-${Date.now()}.png`;
+            link.href = el.canvas.toDataURL('image/png');
             link.click();
         });
     </script>
