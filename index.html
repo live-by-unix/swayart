@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PixelSway</title>
+    <title>PixelSway 1.0</title>
     <style>
         :root {
             --bg-main: #f8fafc;
@@ -330,12 +330,12 @@
                     <label for="max-colors" class="group-title">Number of Colors</label>
                     <span id="colors-val">8</span>
                 </div>
-                <input type="range" id="max-colors" min="4" max="24" value="8" step="1">
+                <input type="range" id="max-colors" min="4" max="32" value="8" step="1">
             </div>
 
             <div class="control-group">
                 <label class="group-title">3. Color-By-Number Palette</label>
-                <p class="help-text">Select a numbered color from your generated palette below. Then drag (sway) your mouse across the blank canvas numbers to paint them in!</p>
+                <p class="help-text">Select a numbered color from your image's palette below. Then drag (sway) your mouse across the blank canvas numbers to paint them in!</p>
                 
                 <div class="color-lock-status">
                     <span>Active Paint Color:</span>
@@ -534,7 +534,7 @@
                 for (let x = 0; x < w; x++) {
                     const idx = (y * w + x) * 4;
                     if (data[idx+3] < 30) {
-                        row.push({ targetIndex: -1, painted: true, color: '#ffffff' });
+                        row.push({ targetIndex: -1, painted: true, color: 'transparent' });
                         continue;
                     }
                     const currentHex = rgbToHex(data[idx], data[idx+1], data[idx+2]);
@@ -628,6 +628,10 @@
                 for (let x = 0; x < w; x++) {
                     const cell = state.mapData[y][x];
                     
+                    if (cell.color === 'transparent') {
+                        continue;
+                    }
+
                     if (cell.painted) {
                         el.ctx.fillStyle = cell.color;
                         el.ctx.fillRect(x * size, y * size, size, size);
@@ -699,7 +703,7 @@
             if (!state.originalImage) return;
             const link = document.createElement('a');
             link.download = `pixelsway-art-${Date.now()}.png`;
-            link.href = el.canvas.toDataURL('image/png');
+            link.href = el.canvas.toToDataURL ? el.canvas.toDataURL('image/png') : el.canvas.toDataURL();
             link.click();
         });
     </script>
