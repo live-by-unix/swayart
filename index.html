@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixelSway 1.0 - Smart Pixel Art Editor</title>
+    <style>
+        :root {
+            --bg-main: #f8fafc;
+            --bg-panel: #ffffff;
+            --border-color: #e2e8f0;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --accent-color: #3b82f6;
+            --accent-hover: #2563eb;
+            --canvas-bg-dark: #cbd5e1;
+            --canvas-bg-light: #f1f5f9;
+        }
+
+        [data-theme="dark"] {
+            --bg-main: #0f172a;
+            --bg-panel: #1e293b;
+            --border-color: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --canvas-bg-dark: #1e293b;
+            --canvas-bg-light: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            transition: background-color 0.2s, color 0.2s;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+        }
+
+        .version {
+            font-size: 0.75rem;
+            background: var(--accent-color);
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 9999px;
+            margin-left: 4px;
+        }
+
+        .app-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 340px;
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border-color);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .workspace {
+            flex: 1;
+            padding: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .group-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .label-val {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #ratio-val {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .help-text {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .file-upload-wrapper {
+            position: relative;
+            width: 100%;
+            height: 40px;
+        }
+
+        .file-upload-wrapper input {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .file-custom {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--bg-main);
+            border: 2px dashed var(--border-color);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent-color);
+        }
+
+        .color-lock-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-main);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .indicator-box {
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .paint-picker {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 4px;
+        }
+
+        .paint-picker label {
+            font-size: 0.9rem;
+        }
+
+        input[type="color"] {
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            cursor: pointer;
+            background: none;
+        }
+
+        .palette-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: var(--bg-main);
+            padding: 10px;
+            border-radius: 6px;
+            min-height: 50px;
+            align-content: flex-start;
+        }
+
+        .empty-palette-text {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin: auto;
+        }
+
+        .swatch {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid rgba(0,0,0,0.15);
+            transition: transform 0.1s;
+        }
+
+        .swatch:hover {
+            transform: scale(1.15);
+        }
+
+        .btn {
+            padding: 10px 16px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.1s;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) { background-color: var(--accent-hover); }
+
+        .btn-primary:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+
+        .btn-secondary:hover { background-color: var(--border-color); }
+
+        .btn-block { width: 100%; margin-top: auto; }
+
+        .canvas-wrapper {
+            position: relative;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            overflow: auto;
+            max-width: 100%;
+            max-height: 100%;
+            background-image: linear-gradient(45deg, var(--canvas-bg-dark) 25%, transparent 25%), linear-gradient(-45deg, var(--canvas-bg-dark) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--canvas-bg-dark) 75%), linear-gradient(-45deg, transparent 75%, var(--canvas-bg-dark) 75%);
+            background-size: 16px 16px;
+            background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+            background-color: var(--canvas-bg-light);
+        }
+
+        .drop-zone-text {
+            padding: 60px;
+            text-align: center;
+            color: var(--text-muted);
+            font-weight: 500;
+            border: 3px dashed var(--border-color);
+            border-radius: 12px;
+            transition: border-color 0.2s;
+        }
+
+        .drop-zone-text.dragover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        canvas {
+            display: none;
+            image-rendering: pixelated;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">👾 PixelSway <span class="version">v1.0</span></div>
+        <div class="header-actions">
+            <button id="theme-toggle" class="btn btn-secondary">🌓 Toggle Theme</button>
+        </div>
+    </header>
+
+    <main class="app-container">
+        <section class="sidebar">
+            <div class="control-group">
+                <label class="group-title">1. Import Image</label>
+                <div class="file-upload-wrapper">
+                    <input type="file" id="upload" accept="image/png, image/jpeg">
+                    <span class="file-custom" id="file-label">Choose PNG/JPEG...</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="label-val">
+                    <label for="pixel-size" class="group-title">2. Pixel Ratio</label>
+                    <span id="ratio-val">16px</span>
+                </div>
+                <input type="range" id="pixel-size" min="4" max="32" value="16" step="2">
+            </div>
+
+            <div class="control-group">
+                <label class="group-title">3. Smart Paint Engine</label>
+                <p class="help-text">Click a color inside your image or selection row to lock it. Hold click and drag (sway) to repaint only that specific color profile!</p>
+                
+                <div class="color-lock-status">
+                    <span>Locked Target:</span>
+                    <div id="target-indicator" class="indicator-box">None</div>
+                </div>
+
+                <div class="paint-picker">
+                    <label for="paint-color">New Replacement Color:</label>
+                    <input type="color" id="paint-color" value="#3b82f6">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="group-title">Detected Image Palette</label>
+                <div id="auto-palette" class="palette-grid">
+                    <span class="empty-palette-text">Upload an image to extract colors</span>
+                </div>
+            </div>
+
+            <button id="export" class="btn btn-primary btn-block" disabled>💾 Export High-Res PNG</button>
+        </section>
+
+        <section class="workspace">
+            <div id="canvas-container" class="canvas-wrapper">
+                <div id="drop-zone-text" class="drop-zone-text">
+                    <p>Drag & Drop or Upload an Image to Begin</p>
+                </div>
+                <canvas id="canvas"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const state = {
+            originalImage: null,
+            targetColorHex: null,
+            isSwaying: false,
+            pixelSize: 16
+        };
+
+        const el = {
+            html: document.documentElement,
+            themeToggle: document.getElementById('theme-toggle'),
+            upload: document.getElementById('upload'),
+            fileLabel: document.getElementById('file-label'),
+            pixelSizeSlider: document.getElementById('pixel-size'),
+            ratioVal: document.getElementById('ratio-val'),
+            exportBtn: document.getElementById('export'),
+            paintColorInput: document.getElementById('paint-color'),
+            targetIndicator: document.getElementById('target-indicator'),
+            autoPalette: document.getElementById('auto-palette'),
+            canvas: document.getElementById('canvas'),
+            canvasContainer: document.getElementById('canvas-container'),
+            dropZoneText: document.getElementById('drop-zone-text'),
+            ctx: document.getElementById('canvas').getContext('2d')
+        };
+
+        el.themeToggle.addEventListener('click', () => {
+            const currentTheme = el.html.getAttribute('data-theme');
+            el.html.setAttribute('data-theme', currentTheme === 'dark' ? 'light' : 'dark');
+        });
+
+        function handleImageLoad(src, fileName) {
+            el.fileLabel.textContent = fileName;
+            const img = new Image();
+            img.onload = () => {
+                state.originalImage = img;
+                el.dropZoneText.style.display = 'none';
+                el.canvas.style.display = 'block';
+                el.exportBtn.disabled = false;
+                processAndRenderPixelation();
+            };
+            img.src = src;
+        }
+
+        el.upload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => handleImageLoad(event.target.result, file.name);
+            reader.readAsDataURL(file);
+        });
+
+        el.canvasContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            el.dropZoneText.classList.add('dragover');
+        });
+
+        el.canvasContainer.addEventListener('dragleave', () => {
+            el.dropZoneText.classList.remove('dragover');
+        });
+
+        el.canvasContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            el.dropZoneText.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && (file.type === "image/png" || file.type === "image/jpeg")) {
+                const reader = new FileReader();
+                reader.onload = (event) => handleImageLoad(event.target.result, file.name);
+                reader.readAsDataURL(file);
+            }
+        });
+
+        el.pixelSizeSlider.addEventListener('input', (e) => {
+            state.pixelSize = parseInt(e.target.value);
+            el.ratioVal.textContent = `${state.pixelSize}px`;
+            if (state.originalImage) processAndRenderPixelation();
+        });
+
+        function processAndRenderPixelation() {
+            const img = state.originalImage;
+            const size = state.pixelSize;
+            const w = Math.max(4, Math.floor(img.width / size));
+            const h = Math.max(4, Math.floor(img.height / size));
+
+            el.canvas.width = w;
+            el.canvas.height = h;
+            el.canvas.style.width = `${w * size}px`;
+            el.canvas.style.height = `${h * size}px`;
+            el.ctx.drawImage(img, 0, 0, w, h);
+
+            extractImagePalette(w, h);
+        }
+
+        function extractImagePalette(w, h) {
+            const imgData = el.ctx.getImageData(0, 0, w, h).data;
+            const colorSet = new Set();
+
+            for (let i = 0; i < imgData.length; i += 4) {
+                if (imgData[i+3] < 128) continue;
+                colorSet.add(rgbToHex(imgData[i], imgData[i+1], imgData[i+2]));
+                if (colorSet.size >= 24) break;
+            }
+
+            el.autoPalette.innerHTML = '';
+            colorSet.forEach(hex => {
+                const swatch = document.createElement('div');
+                swatch.className = 'swatch';
+                swatch.style.backgroundColor = hex;
+                swatch.title = `Lock color: ${hex}`;
+                swatch.addEventListener('click', () => setTargetColor(hex));
+                el.autoPalette.appendChild(swatch);
+            });
+        }
+
+        function getCanvasCoords(e) {
+            const rect = el.canvas.getBoundingClientRect();
+            return {
+                x: Math.floor((e.clientX - rect.left) * (el.canvas.width / rect.width)),
+                y: Math.floor((e.clientY - rect.top) * (el.canvas.height / rect.height))
+            };
+        }
+
+        function setTargetColor(hex) {
+            state.targetColorHex = hex;
+            el.targetIndicator.textContent = hex;
+            el.targetIndicator.style.backgroundColor = hex;
+            const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+            el.targetIndicator.style.color = (r*0.299 + g*0.587 + b*0.114) > 186 ? '#000' : '#fff';
+        }
+
+        el.canvas.addEventListener('mousedown', (e) => {
+            if (!state.originalImage) return;
+            const coords = getCanvasCoords(e);
+            const imgData = el.ctx.getImageData(coords.x, coords.y, 1, 1).data;
+            setTargetColor(rgbToHex(imgData[0], imgData[1], imgData[2]));
+            state.isSwaying = true;
+            executePaintSway(coords.x, coords.y);
+        });
+
+        el.canvas.addEventListener('mousemove', (e) => {
+            if (!state.isSwaying) return;
+            const coords = getCanvasCoords(e);
+            executePaintSway(coords.x, coords.y);
+        });
+
+        window.addEventListener('mouseup', () => state.isSwaying = false);
+
+        function executePaintSway(x, y) {
+            if (x < 0 || x >= el.canvas.width || y < 0 || y >= el.canvas.height) return;
+            const imgData = el.ctx.getImageData(x, y, 1, 1).data;
+            if (rgbToHex(imgData[0], imgData[1], imgData[2]) === state.targetColorHex) {
+                el.ctx.fillStyle = el.paintColorInput.value;
+                el.ctx.fillRect(x, y, 1, 1);
+            }
+        }
+
+        function rgbToHex(r, g, b) {
+            return "#" + [r, g, b].map(x => {
+                const hex = x.toString(16);
+                return hex.length === 1 ? "0" + hex : hex;
+            }).join("");
+        }
+
+        el.exportBtn.addEventListener('click', () => {
+            if (!state.originalImage) return;
+            const exportCanvas = document.createElement('canvas');
+            const exportCtx = exportCanvas.getContext('2d');
+            const size = state.pixelSize;
+
+            exportCanvas.width = el.canvas.width * size;
+            exportCanvas.height = el.canvas.height * size;
+            exportCtx.imageSmoothingEnabled = false;
+            exportCtx.mozImageSmoothingEnabled = false;
+            exportCtx.webkitImageSmoothingEnabled = false;
+            exportCtx.drawImage(el.canvas, 0, 0, exportCanvas.width, exportCanvas.height);
+
+            const link = document.createElement('a');
+            link.download = `pixelsway-${Date.now()}.png`;
+            link.href = exportCanvas.toDataURL('image/png');
+            link.click();
+        });
+    </script>
+</body>
+</html>
